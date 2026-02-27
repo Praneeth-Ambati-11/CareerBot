@@ -3,7 +3,7 @@ name: CareerBot Daily Job Alert
 on:
   schedule:
     # Runs every day at 12:00 PM IST (6:30 UTC)
-    - cron: "30 6 * * *"
+    - cron: "15 12 * * *"  # 5:45 PM IST
 
 jobs:
   send_email:
