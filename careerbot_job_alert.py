@@ -65,3 +65,4 @@ print(f"Email sent with {len(new_jobs)} new jobs.")
 # ====== Update sent_jobs.json ======
 with open(SENT_FILE, "w") as f:
     json.dump(list(sent_jobs), f)
+
