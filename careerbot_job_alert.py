@@ -1,76 +1,67 @@
+import os
+import json
 import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import os
 
-# =================== YOUR EMAIL DETAILS ===================
-EMAIL = "ambatipraneethofficial@gmail.com"       # <-- your Gmail
-APP_PASSWORD = "hkguaqxtfeqquvyn"         # <-- Gmail App Password
-TO_EMAIL = "ambatipraneeth0711@gmail.com" # <-- where you want to receive job alerts
-# =========================================================
+# ====== Environment variables (GitHub Secrets) ======
+EMAIL = os.environ.get("EMAIL")
+APP_PASSWORD = os.environ.get("APP_PASSWORD")
+TO_EMAIL = os.environ.get("TO_EMAIL")
+APP_ID = os.environ.get("APP_ID")
+APP_KEY = os.environ.get("APP_KEY")
 
-# =================== JOB SEARCH DETAILS ==================
-KEYWORDS = "software developer internship"  # <-- job keywords
-LOCATION = "Hyderabad"                             # <-- job location
-APP_ID = "58a18055"                     # <-- Adzuna App ID
-APP_KEY = "5bf711ddd1fe2f70b1d369211ecb5bb4"                   # <-- Adzuna App Key
-RESULTS_PER_PAGE = 5
-# =========================================================
+# ====== Job search criteria ======
+KEYWORDS = "junior software developer internship"
+LOCATION = "Hyderabad"
+SENT_FILE = "sent_jobs.json"  # File to track sent jobs
 
-# ================ FILE TO STORE SENT JOBS ================
-sent_file = "sent_jobs.txt"
-if not os.path.exists(sent_file):
-    open(sent_file, "w").close()
-with open(sent_file, "r") as f:
-    sent_links = f.read().splitlines()
-# =========================================================
+# ====== Load previously sent jobs ======
+if os.path.exists(SENT_FILE):
+    with open(SENT_FILE, "r") as f:
+        sent_jobs = set(json.load(f))
+else:
+    sent_jobs = set()
 
-# ================ FETCH JOBS FROM ADZUNA =================
-url = f"https://api.adzuna.com/v1/api/jobs/in/search/1?app_id={APP_ID}&app_key={APP_KEY}&results_per_page={RESULTS_PER_PAGE}&what={KEYWORDS}&where={LOCATION}"
+# ====== Fetch jobs from Adzuna API ======
+url = f"https://api.adzuna.com/v1/api/jobs/in/search/1?app_id={APP_ID}&app_key={APP_KEY}&results_per_page=10&what={KEYWORDS}&where={LOCATION}"
 response = requests.get(url)
 data = response.json()
-jobs = data.get("results", [])
-# =========================================================
+new_jobs = []
 
-# ================ PREPARE NEW JOBS =======================
-new_jobs_html = ""
-new_job_links = []
+for job in data.get("results", []):
+    job_id = job["id"]
+    if job_id not in sent_jobs:
+        new_jobs.append(job)
+        sent_jobs.add(job_id)
 
-for job in jobs:
-    if job["redirect_url"] not in sent_links:
-        new_jobs_html += f"""
-        <p>
-            <b>Title:</b> {job['title']}<br>
-            <b>Company:</b> {job['company']['display_name']}<br>
-            <b>Location:</b> {job['location']['display_name']}<br>
-            <b>Apply:</b> <a href="{job['redirect_url']}">Click Here</a>
-        </p><hr>
-        """
-        new_job_links.append(job["redirect_url"])
-
-if not new_jobs_html:
-    new_jobs_html = "<p>No new jobs found today.</p>"
-# =========================================================
-
-# ================ SEND EMAIL =============================
+# ====== Prepare email ======
 msg = MIMEMultipart("alternative")
-msg["Subject"] = "📩 CareerBot Job Alerts"
 msg["From"] = EMAIL
 msg["To"] = TO_EMAIL
-msg.attach(MIMEText(new_jobs_html, "html"))
+msg["Subject"] = "CareerBot Daily Job Alert"
 
+if new_jobs:
+    html = "<h2>🚀 New Jobs Found:</h2><ul>"
+    for job in new_jobs:
+        html += f"<li><b>{job['title']}</b> at {job['company']['display_name']} in {job['location']['display_name']}<br>"
+        html += f"<a href='{job['redirect_url']}'>Apply Here</a></li><br>"
+    html += "</ul>"
+else:
+    html = "<h2>✅ No new jobs found today.</h2>"
+
+msg.attach(MIMEText(html, "html"))
+
+# ====== Send email ======
 server = smtplib.SMTP("smtp.gmail.com", 587)
 server.starttls()
 server.login(EMAIL, APP_PASSWORD)
 server.sendmail(EMAIL, TO_EMAIL, msg.as_string())
 server.quit()
 
-print("Job alert email sent successfully!")
+print(f"Email sent with {len(new_jobs)} new jobs.")
 
-# ================ UPDATE SENT FILE ========================
-if new_job_links:
-    with open(sent_file, "a") as f:
-        for link in new_job_links:
-            f.write(link + "\n")
-# =========================================================
+# ====== Update sent_jobs.json ======
+with open(SENT_FILE, "w") as f:
+    json.dump(list(sent_jobs), f)
